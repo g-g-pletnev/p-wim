@@ -75,16 +75,21 @@ jobs:
               echo "$value" | npx wrangler secret put "$key"
             fi
           done < .dev.vars
-
+      
       - name: Render wrangler.toml from template
         run: |
-          cp wrangler.template.toml wrangler.toml
-          while IFS='=' read -r key value; do
-            key=$(echo "$key" | xargs)
-            value=$(echo "$value" | sed -e 's/^"//' -e 's/"$//')
-            [ -n "$key" ] && sed -i "s|\${$key}|$value|g" wrangler.toml
-          done < .dev.vars
+            cp wrangler.template.toml wrangler.toml
+            sed -i 's/\r//' .dev.vars
 
+            while IFS='=' read -r key value; do
+            key=$(echo "$key" | xargs)
+            value=$(echo "$value" | sed -e 's/^"//' -e 's/"$//' | xargs)
+            if [ -n "$key" ]; then
+            echo "⏎ Replacing \${$key} with $value"
+             sed -i "s|\${$key}|$value|g" wrangler.toml
+            fi
+            done < .dev.vars
+        
       - name: Deploy Worker
         run: npx wrangler deploy
         env:
