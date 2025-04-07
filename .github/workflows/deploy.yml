@@ -10,21 +10,23 @@ jobs:
     environment: private1
 
     steps:
-       - name: Checkout code
-         uses: actions/checkout@v4 
-       - name: Set up Node.js
-         uses: actions/setup-node@v4
-         with:
-           node-version: '20'
-       - name: Install dependencies
-         run: npm install
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-       - name: Get ZONE_NAME and ensure DNS exists
-         id: prepare
-         env:
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Get ZONE_NAME and ensure DNS exists
+        id: prepare
+        env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
-         run: |
+        run: |
           set -e
           SUBDOMAIN="1pwim"
 
