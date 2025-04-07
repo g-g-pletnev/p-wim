@@ -72,7 +72,7 @@ jobs:
             value=$(echo "$value" | sed -e 's/^"//' -e 's/"$//')
             if [ -n "$key" ]; then
               echo "🔐 Setting secret: $key"
-              npx wrangler secret put "$key" --env production --yes <<< "$value"
+              echo "$value" | npx wrangler secret put "$key" --env production
             fi
           done < .dev.vars
 
