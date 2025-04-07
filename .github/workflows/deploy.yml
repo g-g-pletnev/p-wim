@@ -77,7 +77,10 @@ jobs:
           done < .dev.vars
 
       - name: Deploy Worker
-        run: npx wrangler deploy
+        run: |
+          export ZONE_NAME=$(grep ZONE_NAME .dev.vars | cut -d '=' -f2- | tr -d '"')
+          export CLOUDFLARE_ZONE_ID=$(grep CLOUDFLARE_ZONE_ID .dev.vars | cut -d '=' -f2- | tr -d '"')
+          npx wrangler deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
