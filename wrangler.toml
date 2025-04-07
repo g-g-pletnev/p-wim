@@ -1,0 +1,8 @@
+name = 1pwim
+main = "src/index.js"
+compatibility_date = "2024-04-06"
+workers_dev = false
+
+routes = [
+  { pattern = "1pwim.${ZONE_NAME}", zone_id = "${CLOUDFLARE_ZONE_ID}" }
+]
