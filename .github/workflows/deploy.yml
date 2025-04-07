@@ -2,8 +2,7 @@ name: Deploy Cloudflare Worker
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
   deploy:
@@ -11,42 +10,43 @@ jobs:
     environment: private1
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+       - name: Checkout code
+         uses: actions/checkout@v4 
+       - name: Set up Node.js
+         uses: actions/setup-node@v4
+         with:
+           node-version: '20'
+       - name: Install dependencies
+         run: npm install
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Get zone name and ensure subdomain exists
-        id: ensure-dns
-        env:
+       - name: Get ZONE_NAME and ensure DNS exists
+         id: prepare
+         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
-        run: |
+         run: |
           set -e
           SUBDOMAIN="1pwim"
-          
-          echo "Getting zone name..."
+
+          echo "Fetching ZONE_NAME from API..."
           ZONE_NAME=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}" \
             -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
             -H "Content-Type: application/json" | jq -r '.result.name')
 
           echo "ZONE_NAME=${ZONE_NAME}" >> $GITHUB_ENV
+          echo "ZONE_NAME=${ZONE_NAME}" > .dev.vars
+          echo "CLOUDFLARE_ZONE_ID=${CLOUDFLARE_ZONE_ID}" >> .dev.vars
+          echo "CLOUDFLARE_ACCOUNT_ID=${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" >> .dev.vars
 
           FQDN="${SUBDOMAIN}.${ZONE_NAME}"
-          echo "Checking if DNS record $FQDN exists..."
+          echo "Checking DNS for ${FQDN}..."
 
           RECORD_ID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/dns_records?name=${FQDN}" \
             -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
             -H "Content-Type: application/json" | jq -r '.result[0].id')
 
           if [ "$RECORD_ID" = "null" ]; then
-            echo "Creating CNAME $SUBDOMAIN → ${SUBDOMAIN}.workers.dev"
+            echo "Creating DNS CNAME for ${FQDN} → ${SUBDOMAIN}.workers.dev"
             curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/dns_records" \
               -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
               -H "Content-Type: application/json" \
@@ -58,13 +58,26 @@ jobs:
                 "proxied": true
               }'
           else
-            echo "✅ DNS record already exists."
+            echo "✅ DNS already exists for ${FQDN}"
           fi
 
-      - name: Deploy to Cloudflare
+      - name: Upload all .dev.vars as secrets
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
-          ZONE_NAME: ${{ env.ZONE_NAME }}
-        run: npm run deploy
+        run: |
+          while IFS='=' read -r key value; do
+            key=$(echo "$key" | xargs)
+            value=$(echo "$value" | sed -e 's/^"//' -e 's/"$//')
+            if [ -n "$key" ]; then
+              echo "🔐 Setting secret: $key"
+              wrangler secret put "$key" --env production --yes <<< "$value"
+            fi
+          done < .dev.vars
+
+      - name: Deploy Worker
+        run: wrangler deploy --env production
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+      - name: Clean up .dev.vars
+        run: rm -f .dev.vars
