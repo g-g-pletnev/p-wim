@@ -72,12 +72,12 @@ jobs:
             value=$(echo "$value" | sed -e 's/^"//' -e 's/"$//')
             if [ -n "$key" ]; then
               echo "🔐 Setting secret: $key"
-              wrangler secret put "$key" --env production --yes <<< "$value"
+              npx wrangler secret put "$key" --env production --yes <<< "$value"
             fi
           done < .dev.vars
 
       - name: Deploy Worker
-        run: wrangler deploy --env production
+        run: npx wrangler deploy --env production
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
