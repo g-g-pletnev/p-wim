@@ -63,38 +63,40 @@ jobs:
             echo "✅ DNS already exists for ${FQDN}"
           fi
 
+      - name: Render wrangler.toml from template
+        run: |
+          cp wrangler.template.toml wrangler.toml
+          sed -i 's/\r//' .dev.vars
+          while IFS='=' read -r key value; do
+            key=$(echo "$key" | xargs)
+            value=$(echo "$value" | sed -e 's/^"//' -e 's/"$//' | xargs)
+            if [ -n "$key" ]; then
+              echo "⏎ Replacing \${$key} with $value"
+              sed -i "s|\${$key}|$value|g" wrangler.toml
+            fi
+          done < .dev.vars
+
+          echo "::group::Rendered wrangler.toml"
+          cat wrangler.toml
+          echo "::endgroup::"
+
       - name: Upload all .dev.vars as secrets
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           while IFS='=' read -r key value; do
             key=$(echo "$key" | xargs)
-            value=$(echo "$value" | sed -e 's/^"//' -e 's/"$//')
+            value=$(echo "$value" | sed -e 's/^"//' -e 's/"$//' | xargs)
             if [ -n "$key" ]; then
               echo "🔐 Setting secret: $key"
               echo "$value" | npx wrangler secret put "$key"
             fi
           done < .dev.vars
-      
-      - name: Render wrangler.toml from template
-        run: |
-            cp wrangler.template.toml wrangler.toml
-            sed -i 's/\r//' .dev.vars
 
-            while IFS='=' read -r key value; do
-            key=$(echo "$key" | xargs)
-            value=$(echo "$value" | sed -e 's/^"//' -e 's/"$//' | xargs)
-            if [ -n "$key" ]; then
-            echo "⏎ Replacing \${$key} with $value"
-             sed -i "s|\${$key}|$value|g" wrangler.toml
-            fi
-            done < .dev.vars
-        
       - name: Deploy Worker
         run: npx wrangler deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
-      - name: Clean up files
-        run: |
-          rm -f .dev.vars wrangler.toml
+      - name: Clean up
+        run: rm -f .dev.vars wrangler.toml
