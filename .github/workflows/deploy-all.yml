@@ -29,13 +29,6 @@ jobs:
         with:
           node-version: '20'
       - run: npm install
-      - run: npm install @cloudflare/wrangler --no-save 
-      - run: |
-          if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
-            echo "CLOUDFLARE_API_TOKEN is set: present"
-          else
-            echo "CLOUDFLARE_API_TOKEN is set: missing"
-          fi     
       - run: node .github/workflows/_migrate.js
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
