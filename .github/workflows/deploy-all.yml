@@ -1,0 +1,43 @@
+name: Deploy All Workers
+
+on:
+  workflow_dispatch:
+
+jobs:
+  detect:
+    name: Detect all workers
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Collect workers
+        id: set
+        run: |
+          workers=$(ls workers | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          echo "matrix={\"worker\":$workers}" >> $GITHUB_OUTPUT
+
+  deploy:
+    name: Deploy ${{ matrix.worker }}
+    needs: detect
+    runs-on: ubuntu-latest
+    environment: private1
+    strategy:
+      matrix: ${{ fromJson(needs.detect.outputs.matrix) }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - run: npm install
+
+      - name: Deploy worker
+        run: .github/workflows/_deploy-worker.sh
+        env:
+          WORKER_NAME: ${{ matrix.worker }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

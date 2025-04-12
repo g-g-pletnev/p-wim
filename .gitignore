@@ -1,0 +1,36 @@
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Optional logs
+*.log
+
+# dotenv / локальные переменные
+.env
+.env.*
+.dev.vars
+
+# wrangler artifacts
+wrangler.toml
+.wrangler/
+dist/
+.cache/
+
+# VSCode / IDE
+.vscode/
+.idea/
+
+# MacOS / system
+.DS_Store
+Thumbs.db
+
+# Test coverage
+coverage/
+
+# Artifacts from local runs or scripts
+*.local.js
+*.local.json
+tmp/
