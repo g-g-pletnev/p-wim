@@ -13,21 +13,31 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set.outputs.matrix }}
+      has_changes: ${{ steps.set.outputs.has_changes }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
 
-      - name: Detect changes
+      - name: Detect changed workers
         id: set
         run: |
-          changed=$(git diff --name-only HEAD^ HEAD | grep '^workers/' | cut -d '/' -f2 | sort -u | jq -R -s -c 'split("\n") | map(select(length > 0))')
-          echo "matrix={\"worker\":$changed}" >> $GITHUB_OUTPUT
+          changed=$(git diff --name-only HEAD^ HEAD | grep '^workers/' | cut -d '/' -f2 | sort -u)
+          if [ -z "$changed" ]; then
+            echo "No changed workers."
+            echo "matrix={\"worker\":[]}" >> $GITHUB_OUTPUT
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            matrix=$(echo "$changed" | jq -R -s -c 'split("\n") | map(select(length > 0))')
+            echo "Changed workers: $matrix"
+            echo "matrix={\"worker\":$matrix}" >> $GITHUB_OUTPUT
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
 
   deploy:
     name: Deploy ${{ matrix.worker }}
     needs: detect
-    if: fromJson(needs.detect.outputs.matrix).worker != []
+    if: needs.detect.outputs.has_changes == 'true'
     runs-on: ubuntu-latest
     environment: private1
     strategy:
@@ -35,6 +45,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
