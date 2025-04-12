@@ -2,5 +2,7 @@
     {
       "name": "api-metrics",
       "type": "web",
-      "route": "/api-metrics"
+      "localRoute": "/api-metrics",
+      "dnsRoute": "api-metrics"
     }
+    

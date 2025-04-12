@@ -1,7 +1,6 @@
-    {
-      "name": "webui",
-      "type": "web",
-      "route": "/"
-    }
-
-  
+{
+  "name": "webui",
+  "type": "web",
+  "localRoute": "/",
+  "dnsRoute": "p-wim"
+}

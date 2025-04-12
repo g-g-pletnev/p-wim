@@ -42,7 +42,7 @@ const mountWorkers = async () => {
     const mod = await import(worker.entry);
 
     if (worker.type === 'web') {
-      const route = worker.route || `/${worker.name}`;
+      const route = worker.localRoute || `/${worker.name}`;
       console.log(`📡 Mounting [${worker.name}] at ${route}`);
       app.all(route + '*', async (req, res) => {
         try {

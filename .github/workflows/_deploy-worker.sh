@@ -6,15 +6,17 @@ CONFIG_PATH="${WORKER_DIR}/worker.json"
 
 echo "🔧 Loading config for $WORKER_NAME..."
 NAME=$(jq -r '.name' "$CONFIG_PATH")
-ROUTE=$(jq -r '.route // empty' "$CONFIG_PATH")
+DNS_ROUTE=$(jq -r '.dnsRoute // empty' "$CONFIG_PATH")
 
 echo "ZONE_NAME=${ZONE_NAME}" > .dev.vars
 echo "CLOUDFLARE_ZONE_ID=${CLOUDFLARE_ZONE_ID}" >> .dev.vars
 echo "CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID}" >> .dev.vars
 echo "WORKER_NAME=${NAME}" >> .dev.vars
+echo "MAIN_PATH=${WORKER_DIR}/index.js" >> .dev.vars
+echo "WORKER_ROUTE=${DNS_ROUTE}" >> .dev.vars
 
-if [ -n "$ROUTE" ]; then
-  FQDN="${ROUTE}.${ZONE_NAME}"
+if [ -n "$DNS_ROUTE" ]; then
+  FQDN="${DNS_ROUTE}.${ZONE_NAME}"
   echo "Checking DNS for ${FQDN}..."
 
   RECORD_ID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/dns_records?name=${FQDN}" \
@@ -28,8 +30,8 @@ if [ -n "$ROUTE" ]; then
       -H "Content-Type: application/json" \
       --data '{
         "type": "CNAME",
-        "name": "'"${ROUTE}"'",
-        "content": "'"${ROUTE}.workers.dev"'",
+        "name": "'"${DNS_ROUTE}"'",
+        "content": "'"${DNS_ROUTE}.workers.dev"'",
         "ttl": 300,
         "proxied": true
       }'
@@ -37,10 +39,11 @@ if [ -n "$ROUTE" ]; then
 fi
 
 cp wrangler.template.toml wrangler.toml
-sed -i "s|\${WORKER_NAME}|${NAME}|g" wrangler.toml
-sed -i "s|\${MAIN_PATH}|${WORKER_DIR}/index.js|g" wrangler.toml
-sed -i "s|\${ZONE_NAME}|${ZONE_NAME}|g" wrangler.toml
-sed -i "s|\${CLOUDFLARE_ZONE_ID}|${CLOUDFLARE_ZONE_ID}|g" wrangler.toml
+sed -i 's|\${WORKER_NAME}|'"${NAME}"'|g' wrangler.toml
+sed -i 's|\${MAIN_PATH}|'"${WORKER_DIR}/index.js"'|g' wrangler.toml
+sed -i 's|\${ZONE_NAME}|'"${ZONE_NAME}"'|g' wrangler.toml
+sed -i 's|\${CLOUDFLARE_ZONE_ID}|'"${CLOUDFLARE_ZONE_ID}"'|g' wrangler.toml
+sed -i 's|\${WORKER_ROUTE}|'"${DNS_ROUTE}"'|g' wrangler.toml
 
 echo "🔐 Uploading secrets..."
 while IFS='=' read -r key value; do

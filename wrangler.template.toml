@@ -1,8 +1,7 @@
 name = "${WORKER_NAME}"
 main = "${MAIN_PATH}"
 compatibility_date = "2024-04-06"
-workers_dev = false
+workers_dev = true
 
-routes = [
-  { pattern = "${WORKER_ROUTE}.${ZONE_NAME}", zone_id = "${CLOUDFLARE_ZONE_ID}" }
-]
+# routes — если DNS указан
+${ROUTES_BLOCK}
