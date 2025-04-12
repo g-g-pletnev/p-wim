@@ -24,6 +24,9 @@ jobs:
 
       - run: npm install
 
+      - name: Run D1 Migrations
+        run: node .github/workflows/migrate.js
+
       - name: Deploy worker
         run: .github/workflows/_deploy-worker.sh
         env:

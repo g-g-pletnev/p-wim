@@ -12,6 +12,7 @@ pnpm-debug.log*
 .env
 .env.*
 .dev.vars
+.d1/
 
 # wrangler artifacts
 wrangler.toml
