@@ -3,6 +3,6 @@
       "name": "api-metrics",
       "type": "web",
       "localRoute": "/api-metrics",
-      "dnsRoute": "api-metrics"
+      "dnsRoute": "test-pwim-api-metrics"
     }
     

@@ -2,5 +2,5 @@
   "name": "webui",
   "type": "web",
   "localRoute": "/",
-  "dnsRoute": "p-wim"
+  "dnsRoute": "test-pwim-ui"
 }
