@@ -1,6 +1,13 @@
 #!/bin/bash
 set -e
 
+# Проверка наличия ZONE_NAME в окружении
+if [ -z "$ZONE_NAME" ]; then
+  echo "❌ ZONE_NAME is not set. Please define it via GitHub environment or workflow 'env:'"
+  exit 1
+fi
+
+# === Путь и конфиг воркера ===
 WORKER_DIR="workers/${WORKER_NAME}"
 CONFIG_PATH="${WORKER_DIR}/worker.json"
 
@@ -8,6 +15,7 @@ echo "🔧 Loading config for $WORKER_NAME..."
 NAME=$(jq -r '.name' "$CONFIG_PATH")
 DNS_ROUTE=$(jq -r '.dnsRoute // empty' "$CONFIG_PATH")
 
+# === Переменные во временный файл и экспорт в окружение ===
 echo "ZONE_NAME=${ZONE_NAME}" > .dev.vars
 echo "CLOUDFLARE_ZONE_ID=${CLOUDFLARE_ZONE_ID}" >> .dev.vars
 echo "CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID}" >> .dev.vars
@@ -15,6 +23,12 @@ echo "WORKER_NAME=${NAME}" >> .dev.vars
 echo "MAIN_PATH=${WORKER_DIR}/index.js" >> .dev.vars
 echo "WORKER_ROUTE=${DNS_ROUTE}" >> .dev.vars
 
+export ZONE_NAME CLOUDFLARE_ZONE_ID CLOUDFLARE_ACCOUNT_ID
+export WORKER_NAME="${NAME}"
+export MAIN_PATH="${WORKER_DIR}/index.js"
+export WORKER_ROUTE="${DNS_ROUTE}"
+
+# === DNS-проверка и создание, если необходимо ===
 if [ -n "$DNS_ROUTE" ]; then
   FQDN="${DNS_ROUTE}.${ZONE_NAME}"
   echo "Checking DNS for ${FQDN}..."
@@ -40,30 +54,31 @@ if [ -n "$DNS_ROUTE" ]; then
   fi
 fi
 
-
-# === Render wrangler.toml ===
+# === Генерация wrangler.toml ===
 cp wrangler.template.toml wrangler.toml
 
-# === Append routes block only if DNS_ROUTE is set ===
+sed -i "s|\${WORKER_NAME}|$WORKER_NAME|g" wrangler.toml
+sed -i "s|\${MAIN_PATH}|$MAIN_PATH|g" wrangler.toml
+sed -i "s|\${ZONE_NAME}|$ZONE_NAME|g" wrangler.toml
+sed -i "s|\${CLOUDFLARE_ZONE_ID}|$CLOUDFLARE_ZONE_ID|g" wrangler.toml
+sed -i "s|\${WORKER_ROUTE}|$WORKER_ROUTE|g" wrangler.toml
+
+# === Добавление routes, если DNS_ROUTE задан ===
 if [ -n "$DNS_ROUTE" ]; then
-  echo "" >> wrangler.toml
-  echo "routes = [" >> wrangler.toml
-  echo "  { pattern = \"${DNS_ROUTE}.${ZONE_NAME}\", zone_id = \"${CLOUDFLARE_ZONE_ID}\" }" >> wrangler.toml
-  echo "]" >> wrangler.toml
+  {
+    echo ""
+    echo "routes = ["
+    echo "  { pattern = \"${DNS_ROUTE}.${ZONE_NAME}\", zone_id = \"${CLOUDFLARE_ZONE_ID}\" }"
+    echo "]"
+  } >> wrangler.toml
 fi
 
-sed -i "s|\${WORKER_NAME}|${NAME}|g" wrangler.toml
-sed -i "s|\${MAIN_PATH}|${WORKER_DIR}/index.js|g" wrangler.toml
-sed -i "s|\${ZONE_NAME}|${ZONE_NAME}|g" wrangler.toml
-sed -i "s|\${CLOUDFLARE_ZONE_ID}|${CLOUDFLARE_ZONE_ID}|g" wrangler.toml
-sed -i "s|\${WORKER_ROUTE}|${DNS_ROUTE}|g" wrangler.toml
-
-
+# === Отладочный вывод TOML ===
 echo "::group::Rendered wrangler.toml"
 cat wrangler.toml
 echo "::endgroup::"
 
-# === Upload secrets ===
+# === Upload секретов ===
 echo "🔐 Uploading secrets..."
 while IFS='=' read -r key value; do
   key=$(echo "$key" | xargs)
