@@ -34,7 +34,8 @@ jobs:
             echo "CLOUDFLARE_API_TOKEN is set: present"
           else
             echo "CLOUDFLARE_API_TOKEN is set: missing"
-          fi     - run: node .github/workflows/_migrate.js
+          fi     
+      - run: node .github/workflows/_migrate.js
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
