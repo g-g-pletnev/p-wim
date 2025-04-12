@@ -21,6 +21,7 @@ jobs:
   migrate:
     name: Run Migrations
     runs-on: ubuntu-latest
+    environment: private1
     needs: detect
     steps:
       - uses: actions/checkout@v4
