@@ -7,8 +7,20 @@ import sqlite3 from 'sqlite3';
 const DB_PATH = '.d1/metrics.sqlite';
 const MIGRATIONS_DIR = 'migrations';
 const DB_NAME = 'metrics';
-console.log('🔍 CLOUDFLARE_API_TOKEN is set:', !!process.env.CLOUDFLARE_API_TOKEN);
-const IS_CLOUD = !!process.env.CLOUDFLARE_API_TOKEN;
+
+// Fallback to GitHub Actions injected env file
+let CLOUDFLARE_TOKEN = process.env.CLOUDFLARE_API_TOKEN;
+if (!CLOUDFLARE_TOKEN) {
+  try {
+    const githubEnv = await fs.readFile(process.env.GITHUB_ENV || '', 'utf8');
+    const tokenLine = githubEnv.split('\n').find(l => l.startsWith('CLOUDFLARE_API_TOKEN='));
+    if (tokenLine) CLOUDFLARE_TOKEN = tokenLine.split('=')[1];
+  } catch (_) {
+    // no-op
+  }
+}
+
+const IS_CLOUD = !!CLOUDFLARE_TOKEN;
 const WRANGLER_TEMPLATE = 'wrangler.template.toml';
 const WRANGLER_OUTPUT = 'wrangler.toml';
 
