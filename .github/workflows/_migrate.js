@@ -7,6 +7,7 @@ import sqlite3 from 'sqlite3';
 const DB_PATH = '.d1/metrics.sqlite';
 const MIGRATIONS_DIR = 'migrations';
 const DB_NAME = 'metrics';
+console.log('🔍 CLOUDFLARE_API_TOKEN is set:', !!process.env.CLOUDFLARE_API_TOKEN);
 const IS_CLOUD = !!process.env.CLOUDFLARE_API_TOKEN;
 const WRANGLER_TEMPLATE = 'wrangler.template.toml';
 const WRANGLER_OUTPUT = 'wrangler.toml';
