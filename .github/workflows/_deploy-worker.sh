@@ -1,13 +1,11 @@
 #!/bin/bash
 set -e
 
-# Проверка наличия ZONE_NAME в окружении
 if [ -z "$ZONE_NAME" ]; then
   echo "❌ ZONE_NAME is not set. Please define it via GitHub environment or workflow 'env:'"
   exit 1
 fi
 
-# === Путь и конфиг воркера ===
 WORKER_DIR="workers/${WORKER_NAME}"
 CONFIG_PATH="${WORKER_DIR}/worker.json"
 
@@ -15,20 +13,27 @@ echo "🔧 Loading config for $WORKER_NAME..."
 NAME=$(jq -r '.name' "$CONFIG_PATH")
 DNS_ROUTE=$(jq -r '.dnsRoute // empty' "$CONFIG_PATH")
 
-# === Переменные во временный файл и экспорт в окружение ===
+# === Получение D1_DATABASE_ID (если есть имя базы в шаблоне)
+D1_DATABASE_ID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database" \
+  -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+  -H "Content-Type: application/json" | jq -r '.result[] | select(.name=="metrics") | .uuid')
+
+# === Экспорт и .dev.vars
 echo "ZONE_NAME=${ZONE_NAME}" > .dev.vars
 echo "CLOUDFLARE_ZONE_ID=${CLOUDFLARE_ZONE_ID}" >> .dev.vars
 echo "CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID}" >> .dev.vars
 echo "WORKER_NAME=${NAME}" >> .dev.vars
 echo "MAIN_PATH=${WORKER_DIR}/index.js" >> .dev.vars
 echo "WORKER_ROUTE=${DNS_ROUTE}" >> .dev.vars
+echo "D1_DATABASE_ID=${D1_DATABASE_ID}" >> .dev.vars
 
 export ZONE_NAME CLOUDFLARE_ZONE_ID CLOUDFLARE_ACCOUNT_ID
 export WORKER_NAME="${NAME}"
 export MAIN_PATH="${WORKER_DIR}/index.js"
 export WORKER_ROUTE="${DNS_ROUTE}"
+export D1_DATABASE_ID
 
-# === DNS-проверка и создание, если необходимо ===
+# === DNS
 if [ -n "$DNS_ROUTE" ]; then
   FQDN="${DNS_ROUTE}.${ZONE_NAME}"
   echo "Checking DNS for ${FQDN}..."
@@ -54,16 +59,16 @@ if [ -n "$DNS_ROUTE" ]; then
   fi
 fi
 
-# === Генерация wrangler.toml ===
+# === TOML
 cp wrangler.template.toml wrangler.toml
-
 sed -i "s|\${WORKER_NAME}|$WORKER_NAME|g" wrangler.toml
 sed -i "s|\${MAIN_PATH}|$MAIN_PATH|g" wrangler.toml
 sed -i "s|\${ZONE_NAME}|$ZONE_NAME|g" wrangler.toml
 sed -i "s|\${CLOUDFLARE_ZONE_ID}|$CLOUDFLARE_ZONE_ID|g" wrangler.toml
 sed -i "s|\${WORKER_ROUTE}|$WORKER_ROUTE|g" wrangler.toml
+sed -i "s|\${D1_DATABASE_ID}|$D1_DATABASE_ID|g" wrangler.toml
 
-# === Добавление routes, если DNS_ROUTE задан ===
+# === Routes
 if [ -n "$DNS_ROUTE" ]; then
   {
     echo ""
@@ -73,24 +78,23 @@ if [ -n "$DNS_ROUTE" ]; then
   } >> wrangler.toml
 fi
 
-# === Отладочный вывод TOML ===
 echo "::group::Rendered wrangler.toml"
 cat wrangler.toml
 echo "::endgroup::"
 
-# === Upload секретов ===
+# === Upload secrets
 echo "🔐 Uploading secrets..."
 while IFS='=' read -r key value; do
   key=$(echo "$key" | xargs)
-  value=$(echo "$value" | sed -e 's/^"//' -e 's/"$//' | xargs)
+  value=$(echo "$value" | sed -e 's/^\"//' -e 's/\"$//' | xargs)
   if [ -n "$key" ]; then
     echo "$value" | npx wrangler secret put "$key"
   fi
 done < .dev.vars
 
-# === Deploy ===
+# === Deploy
 echo "🚀 Deploying ${WORKER_NAME}"
 npx wrangler deploy
 
-# === Cleanup ===
+# === Cleanup
 rm -f .dev.vars wrangler.toml

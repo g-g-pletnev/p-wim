@@ -1,14 +1,14 @@
+// .github/workflows/migrate.js
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
 import sqlite3 from 'sqlite3';
+import https from 'node:https';
 
 const DB_PATH = '.d1/metrics.sqlite';
 const MIGRATIONS_DIR = 'migrations';
 const DB_NAME = 'metrics';
-
-const CLOUDFLARE_TOKEN = process.env.CLOUDFLARE_API_TOKEN;
-const IS_CLOUD = !!CLOUDFLARE_TOKEN;
+const IS_CLOUD = !!process.env.CLOUDFLARE_API_TOKEN;
 const WRANGLER_TEMPLATE = 'wrangler.template.toml';
 const WRANGLER_OUTPUT = 'wrangler.toml';
 
@@ -17,11 +17,43 @@ async function getMigrationFiles() {
   return files.filter(f => f.endsWith('.sql')).sort();
 }
 
-async function renderWranglerToml() {
+function fetchDatabaseId(accountId, dbName, apiToken) {
+  const options = {
+    hostname: 'api.cloudflare.com',
+    path: `/client/v4/accounts/${accountId}/d1/database`,
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${apiToken}`,
+      'Content-Type': 'application/json'
+    }
+  };
+
+  return new Promise((resolve, reject) => {
+    const req = https.request(options, res => {
+      let data = '';
+      res.on('data', chunk => (data += chunk));
+      res.on('end', () => {
+        try {
+          const result = JSON.parse(data);
+          const db = result.result.find(db => db.name === DB_NAME);
+          if (db) resolve(db.uuid);
+          else reject(new Error(`Database '${DB_NAME}' not found in account`));
+        } catch (err) {
+          reject(err);
+        }
+      });
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+async function renderWranglerToml(databaseId) {
   const template = await fs.readFile(WRANGLER_TEMPLATE, 'utf8');
   const replaced = template
     .replace(/\$\{WORKER_NAME\}/g, 'migrator')
-    .replace(/\$\{MAIN_PATH\}/g, 'm.js');
+    .replace(/\$\{MAIN_PATH\}/g, 'm.js')
+    .replace(/\$\{D1_DATABASE_ID\}/g, databaseId);
   await fs.writeFile(WRANGLER_OUTPUT, replaced);
 }
 
@@ -31,37 +63,34 @@ async function renderWranglerToml() {
 async function applyCloudMigrations() {
   console.log('☁️ Running in Cloudflare D1 mode');
 
-  try {
-    await renderWranglerToml();
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+  if (!accountId) throw new Error('CLOUDFLARE_ACCOUNT_ID is not set');
 
-    const appliedRaw = execSync(`npx wrangler d1 execute ${DB_NAME} --remote --command "SELECT name FROM sys_migrations;" || true`).toString();
-    const applied = new Set(
-      appliedRaw
-        .split('\n')
-        .filter(line => line && !line.includes('name') && !line.includes('success'))
-        .map(line => line.trim())
-    );
+  const databaseId = await fetchDatabaseId(accountId, DB_NAME, process.env.CLOUDFLARE_API_TOKEN);
+  await renderWranglerToml(databaseId);
 
-    const files = await getMigrationFiles();
+  const appliedRaw = execSync(`npx wrangler d1 execute ${DB_NAME} --remote --command "SELECT name FROM sys_migrations;" || true`).toString();
+  const applied = new Set(
+    appliedRaw
+      .split('\n')
+      .filter(line => line && !line.includes('name') && !line.includes('success'))
+      .map(line => line.trim())
+  );
 
-    for (const file of files) {
-      if (applied.has(file)) {
-        console.log(`⏭ Skipping already applied: ${file}`);
-        continue;
-      }
-      console.log(`🔄 Applying ${file}...`);
-      execSync(`npx wrangler d1 execute ${DB_NAME} --remote --file ${path.join(MIGRATIONS_DIR, file)}`, { stdio: 'inherit' });
-      execSync(`npx wrangler d1 execute ${DB_NAME} --remote --command "INSERT INTO sys_migrations (name) VALUES ('${file}');"`);
-      console.log(`✅ Done: ${file}`);
+  const files = await getMigrationFiles();
+
+  for (const file of files) {
+    if (applied.has(file)) {
+      console.log(`⏭ Skipping already applied: ${file}`);
+      continue;
     }
-  } finally {
-    try {
-      await fs.unlink(WRANGLER_OUTPUT);
-      console.log('🗑️ Cleaned up wrangler.toml');
-    } catch (err) {
-      console.warn('⚠️ Could not delete wrangler.toml:', err.message);
-    }
+    console.log(`🔄 Applying ${file}...`);
+    execSync(`npx wrangler d1 execute ${DB_NAME} --remote --file ${path.join(MIGRATIONS_DIR, file)}`, { stdio: 'inherit' });
+    execSync(`npx wrangler d1 execute ${DB_NAME} --remote --command "INSERT INTO sys_migrations (name) VALUES ('${file}');"`);
+    console.log(`✅ Done: ${file}`);
   }
+
+  await fs.unlink(WRANGLER_OUTPUT);
   console.log('🎉 Cloud migrations complete');
 }
 
