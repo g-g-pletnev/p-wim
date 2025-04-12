@@ -1,4 +1,3 @@
-// .github/workflows/migrate.js
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
@@ -8,18 +7,7 @@ const DB_PATH = '.d1/metrics.sqlite';
 const MIGRATIONS_DIR = 'migrations';
 const DB_NAME = 'metrics';
 
-// Fallback to GitHub Actions injected env file
-let CLOUDFLARE_TOKEN = process.env.CLOUDFLARE_API_TOKEN;
-if (!CLOUDFLARE_TOKEN) {
-  try {
-    const githubEnv = await fs.readFile(process.env.GITHUB_ENV || '', 'utf8');
-    const tokenLine = githubEnv.split('\n').find(l => l.startsWith('CLOUDFLARE_API_TOKEN='));
-    if (tokenLine) CLOUDFLARE_TOKEN = tokenLine.split('=')[1];
-  } catch (_) {
-    // no-op
-  }
-}
-
+const CLOUDFLARE_TOKEN = process.env.CLOUDFLARE_API_TOKEN;
 const IS_CLOUD = !!CLOUDFLARE_TOKEN;
 const WRANGLER_TEMPLATE = 'wrangler.template.toml';
 const WRANGLER_OUTPUT = 'wrangler.toml';
@@ -43,30 +31,37 @@ async function renderWranglerToml() {
 async function applyCloudMigrations() {
   console.log('☁️ Running in Cloudflare D1 mode');
 
-  await renderWranglerToml();
+  try {
+    await renderWranglerToml();
 
-  const appliedRaw = execSync(`npx wrangler d1 execute ${DB_NAME} --remote --command "SELECT name FROM sys_migrations;" || true`).toString();
-  const applied = new Set(
-    appliedRaw
-      .split('\n')
-      .filter(line => line && !line.includes('name') && !line.includes('success'))
-      .map(line => line.trim())
-  );
+    const appliedRaw = execSync(`npx wrangler d1 execute ${DB_NAME} --remote --command "SELECT name FROM sys_migrations;" || true`).toString();
+    const applied = new Set(
+      appliedRaw
+        .split('\n')
+        .filter(line => line && !line.includes('name') && !line.includes('success'))
+        .map(line => line.trim())
+    );
 
-  const files = await getMigrationFiles();
+    const files = await getMigrationFiles();
 
-  for (const file of files) {
-    if (applied.has(file)) {
-      console.log(`⏭ Skipping already applied: ${file}`);
-      continue;
+    for (const file of files) {
+      if (applied.has(file)) {
+        console.log(`⏭ Skipping already applied: ${file}`);
+        continue;
+      }
+      console.log(`🔄 Applying ${file}...`);
+      execSync(`npx wrangler d1 execute ${DB_NAME} --remote --file ${path.join(MIGRATIONS_DIR, file)}`, { stdio: 'inherit' });
+      execSync(`npx wrangler d1 execute ${DB_NAME} --remote --command "INSERT INTO sys_migrations (name) VALUES ('${file}');"`);
+      console.log(`✅ Done: ${file}`);
     }
-    console.log(`🔄 Applying ${file}...`);
-    execSync(`npx wrangler d1 execute ${DB_NAME} --remote --file ${path.join(MIGRATIONS_DIR, file)}`, { stdio: 'inherit' });
-    execSync(`npx wrangler d1 execute ${DB_NAME} --remote --command "INSERT INTO sys_migrations (name) VALUES ('${file}');"`);
-    console.log(`✅ Done: ${file}`);
+  } finally {
+    try {
+      await fs.unlink(WRANGLER_OUTPUT);
+      console.log('🗑️ Cleaned up wrangler.toml');
+    } catch (err) {
+      console.warn('⚠️ Could not delete wrangler.toml:', err.message);
+    }
   }
-
-  await fs.unlink(WRANGLER_OUTPUT);
   console.log('🎉 Cloud migrations complete');
 }
 
