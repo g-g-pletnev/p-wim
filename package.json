@@ -5,7 +5,7 @@
   "scripts": {
     "deploy": "wrangler deploy",
     "dev": "node app/index.js",
-    "migrate": "node .github/workflows/migrate.js"
+    "migrate": "node .github/workflows/_migrate.js"
   },
   "devDependencies": {
     "wrangler": "^4.8.0",

@@ -28,7 +28,7 @@ jobs:
         with:
           node-version: '20'
       - run: npm install
-      - run: node .github/workflows/migrate.js
+      - run: node .github/workflows/_migrate.js
 
   deploy:
     name: Deploy ${{ matrix.worker }}

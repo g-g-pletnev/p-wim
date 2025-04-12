@@ -8,10 +8,20 @@ const DB_PATH = '.d1/metrics.sqlite';
 const MIGRATIONS_DIR = 'migrations';
 const DB_NAME = 'metrics';
 const IS_CLOUD = !!process.env.CLOUDFLARE_API_TOKEN;
+const WRANGLER_TEMPLATE = 'wrangler.template.toml';
+const WRANGLER_OUTPUT = 'wrangler.toml';
 
 async function getMigrationFiles() {
   const files = await fs.readdir(MIGRATIONS_DIR);
   return files.filter(f => f.endsWith('.sql')).sort();
+}
+
+async function renderWranglerToml() {
+  const template = await fs.readFile(WRANGLER_TEMPLATE, 'utf8');
+  const replaced = template
+    .replace(/\$\{WORKER_NAME\}/g, 'migrator')
+    .replace(/\$\{MAIN_PATH\}/g, 'm.js');
+  await fs.writeFile(WRANGLER_OUTPUT, replaced);
 }
 
 // ----------------------------
@@ -19,6 +29,9 @@ async function getMigrationFiles() {
 // ----------------------------
 async function applyCloudMigrations() {
   console.log('☁️ Running in Cloudflare D1 mode');
+
+  await renderWranglerToml();
+
   const appliedRaw = execSync(`npx wrangler d1 execute ${DB_NAME} --remote --command "SELECT name FROM sys_migrations;" || true`).toString();
   const applied = new Set(
     appliedRaw
@@ -40,6 +53,7 @@ async function applyCloudMigrations() {
     console.log(`✅ Done: ${file}`);
   }
 
+  await fs.unlink(WRANGLER_OUTPUT);
   console.log('🎉 Cloud migrations complete');
 }
 
