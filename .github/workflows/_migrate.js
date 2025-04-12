@@ -17,13 +17,13 @@ async function getMigrationFiles() {
   return files.filter(f => f.endsWith('.sql')).sort();
 }
 
-function fetchDatabaseId(accountId, dbName, apiToken) {
+function apiRequest(method, path, token, body = null) {
   const options = {
     hostname: 'api.cloudflare.com',
-    path: `/client/v4/accounts/${accountId}/d1/database`,
-    method: 'GET',
+    path,
+    method,
     headers: {
-      'Authorization': `Bearer ${apiToken}`,
+      'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json'
     }
   };
@@ -35,20 +35,37 @@ function fetchDatabaseId(accountId, dbName, apiToken) {
       res.on('end', () => {
         try {
           const json = JSON.parse(data);
-          if (!json.success || !Array.isArray(json.result)) {
-            return reject(new Error(`Invalid response from Cloudflare API:\n${data}`));
-          }
-          const db = json.result.find(db => db.name === DB_NAME);
-          if (db) resolve(db.uuid);
-          else reject(new Error(`Database '${DB_NAME}' not found in account`));
+          resolve(json);
         } catch (err) {
           reject(err);
         }
       });
     });
     req.on('error', reject);
+    if (body) req.write(JSON.stringify(body));
     req.end();
   });
+}
+
+async function fetchOrCreateDatabase(accountId, dbName, apiToken) {
+  const list = await apiRequest('GET', `/client/v4/accounts/${accountId}/d1/database`, apiToken);
+
+  if (!list.success || !Array.isArray(list.result)) {
+    throw new Error(`Invalid response from Cloudflare API:
+${JSON.stringify(list, null, 2)}`);
+  }
+
+  const existing = list.result.find(db => db.name === dbName);
+  if (existing) return existing.uuid;
+
+  console.log(`📦 Creating new D1 database '${dbName}'...`);
+  const created = await apiRequest('POST', `/client/v4/accounts/${accountId}/d1/database`, apiToken, { name: dbName });
+
+  if (!created.success || !created.result?.uuid) {
+    throw new Error(`Failed to create database '${dbName}':\n${JSON.stringify(created, null, 2)}`);
+  }
+
+  return created.result.uuid;
 }
 
 async function renderWranglerToml(databaseId) {
@@ -69,7 +86,7 @@ async function applyCloudMigrations() {
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
   if (!accountId) throw new Error('CLOUDFLARE_ACCOUNT_ID is not set');
 
-  const databaseId = await fetchDatabaseId(accountId, DB_NAME, process.env.CLOUDFLARE_API_TOKEN);
+  const databaseId = await fetchOrCreateDatabase(accountId, DB_NAME, process.env.CLOUDFLARE_API_TOKEN);
   await renderWranglerToml(databaseId);
 
   const appliedRaw = execSync(`npx wrangler d1 execute ${DB_NAME} --remote --command "SELECT name FROM sys_migrations;" || true`).toString();
