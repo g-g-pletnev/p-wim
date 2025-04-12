@@ -34,7 +34,7 @@ jobs:
 
   deploy:
     name: Deploy ${{ matrix.worker }}
-    needs: detect
+    needs: [detect, migrate]
     runs-on: ubuntu-latest
     environment: private1
     strategy:
