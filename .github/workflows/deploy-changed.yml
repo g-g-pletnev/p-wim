@@ -8,6 +8,18 @@ on:
       - "wrangler.template.toml"
 
 jobs:
+  migrate:
+    name: Run Migrations
+    runs-on: ubuntu-latest
+    needs: detect
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install
+      - run: node .github/workflows/migrate.js
+      
   detect:
     name: Detect changed workers
     runs-on: ubuntu-latest
@@ -51,9 +63,6 @@ jobs:
           node-version: '20'
 
       - run: npm install
-
-      - name: Run D1 Migrations
-        run: node .github/workflows/migrate.js
         
       - name: Deploy worker
         run: .github/workflows/_deploy-worker.sh
