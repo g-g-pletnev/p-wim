@@ -24,7 +24,7 @@ if [ -n "$DNS_ROUTE" ]; then
     -H "Content-Type: application/json" | jq -r '.result[0].id')
 
   if [ "$RECORD_ID" = "null" ]; then
-    echo "Creating DNS for ${FQDN}"
+    echo "Creating DNS record for ${FQDN} → ${DNS_ROUTE}.workers.dev"
     curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/dns_records" \
       -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
       -H "Content-Type: application/json" \
@@ -35,16 +35,32 @@ if [ -n "$DNS_ROUTE" ]; then
         "ttl": 300,
         "proxied": true
       }'
+  else
+    echo "✅ DNS record already exists for ${FQDN}"
   fi
 fi
 
+# === Render wrangler.toml ===
 cp wrangler.template.toml wrangler.toml
-sed -i 's|\${WORKER_NAME}|'"${NAME}"'|g' wrangler.toml
-sed -i 's|\${MAIN_PATH}|'"${WORKER_DIR}/index.js"'|g' wrangler.toml
-sed -i 's|\${ZONE_NAME}|'"${ZONE_NAME}"'|g' wrangler.toml
-sed -i 's|\${CLOUDFLARE_ZONE_ID}|'"${CLOUDFLARE_ZONE_ID}"'|g' wrangler.toml
-sed -i 's|\${WORKER_ROUTE}|'"${DNS_ROUTE}"'|g' wrangler.toml
+sed -i "s|\${WORKER_NAME}|${NAME}|g" wrangler.toml
+sed -i "s|\${MAIN_PATH}|${WORKER_DIR}/index.js|g" wrangler.toml
+sed -i "s|\${ZONE_NAME}|${ZONE_NAME}|g" wrangler.toml
+sed -i "s|\${CLOUDFLARE_ZONE_ID}|${CLOUDFLARE_ZONE_ID}|g" wrangler.toml
+sed -i "s|\${WORKER_ROUTE}|${DNS_ROUTE}|g" wrangler.toml
 
+# === Append routes block only if DNS_ROUTE is set ===
+if [ -n "$DNS_ROUTE" ]; then
+  echo "" >> wrangler.toml
+  echo "routes = [" >> wrangler.toml
+  echo "  { pattern = \"${DNS_ROUTE}.${ZONE_NAME}\", zone_id = \"${CLOUDFLARE_ZONE_ID}\" }" >> wrangler.toml
+  echo "]" >> wrangler.toml
+fi
+
+echo "::group::Rendered wrangler.toml"
+cat wrangler.toml
+echo "::endgroup::"
+
+# === Upload secrets ===
 echo "🔐 Uploading secrets..."
 while IFS='=' read -r key value; do
   key=$(echo "$key" | xargs)
@@ -54,7 +70,9 @@ while IFS='=' read -r key value; do
   fi
 done < .dev.vars
 
+# === Deploy ===
 echo "🚀 Deploying ${WORKER_NAME}"
 npx wrangler deploy
 
+# === Cleanup ===
 rm -f .dev.vars wrangler.toml
