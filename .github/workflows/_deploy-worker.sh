@@ -40,13 +40,9 @@ if [ -n "$DNS_ROUTE" ]; then
   fi
 fi
 
+
 # === Render wrangler.toml ===
 cp wrangler.template.toml wrangler.toml
-sed -i "s|\${WORKER_NAME}|${NAME}|g" wrangler.toml
-sed -i "s|\${MAIN_PATH}|${WORKER_DIR}/index.js|g" wrangler.toml
-sed -i "s|\${ZONE_NAME}|${ZONE_NAME}|g" wrangler.toml
-sed -i "s|\${CLOUDFLARE_ZONE_ID}|${CLOUDFLARE_ZONE_ID}|g" wrangler.toml
-sed -i "s|\${WORKER_ROUTE}|${DNS_ROUTE}|g" wrangler.toml
 
 # === Append routes block only if DNS_ROUTE is set ===
 if [ -n "$DNS_ROUTE" ]; then
@@ -55,6 +51,13 @@ if [ -n "$DNS_ROUTE" ]; then
   echo "  { pattern = \"${DNS_ROUTE}.${ZONE_NAME}\", zone_id = \"${CLOUDFLARE_ZONE_ID}\" }" >> wrangler.toml
   echo "]" >> wrangler.toml
 fi
+
+sed -i "s|\${WORKER_NAME}|${NAME}|g" wrangler.toml
+sed -i "s|\${MAIN_PATH}|${WORKER_DIR}/index.js|g" wrangler.toml
+sed -i "s|\${ZONE_NAME}|${ZONE_NAME}|g" wrangler.toml
+sed -i "s|\${CLOUDFLARE_ZONE_ID}|${CLOUDFLARE_ZONE_ID}|g" wrangler.toml
+sed -i "s|\${WORKER_ROUTE}|${DNS_ROUTE}|g" wrangler.toml
+
 
 echo "::group::Rendered wrangler.toml"
 cat wrangler.toml
