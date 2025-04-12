@@ -34,8 +34,11 @@ function fetchDatabaseId(accountId, dbName, apiToken) {
       res.on('data', chunk => (data += chunk));
       res.on('end', () => {
         try {
-          const result = JSON.parse(data);
-          const db = result.result.find(db => db.name === DB_NAME);
+          const json = JSON.parse(data);
+          if (!json.success || !Array.isArray(json.result)) {
+            return reject(new Error(`Invalid response from Cloudflare API:\n${data}`));
+          }
+          const db = json.result.find(db => db.name === DB_NAME);
           if (db) resolve(db.uuid);
           else reject(new Error(`Database '${DB_NAME}' not found in account`));
         } catch (err) {
